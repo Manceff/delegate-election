@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Organiser · Class Representative Election · Master FTD</title>
+  <meta name="theme-color" content="#00386E">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Albert+Sans:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&display=swap">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="band band-compact">
+    <div class="wrap">
+      <a class="brand" href="./"><img src="logo-paris1.svg" alt="Université Paris 1 Panthéon-Sorbonne" width="146" height="56"></a>
+      <div class="intro">
+        <p class="programme">Master Finance, Technology &amp; Data</p>
+        <h1>Organiser view</h1>
+        <p class="lede">Candidates, live vote counts and the voter roll. <a href="./">Back to the election page</a></p>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap admin">
+    <section id="gate" aria-labelledby="gate-title">
+      <h2 id="gate-title">Enter the organiser key</h2>
+      <p class="section-note">Nothing on this page loads without the key.</p>
+      <form class="gate" id="gate-form" novalidate>
+        <div class="field">
+          <label for="admin-key">Organiser key</label>
+          <input id="admin-key" type="password" autocomplete="current-password" spellcheck="false">
+        </div>
+        <label class="check" for="remember"><input id="remember" type="checkbox"> Remember on this device</label>
+        <p class="alert is-error" id="gate-error" role="alert" hidden></p>
+        <button class="btn" type="submit" id="gate-submit">Open</button>
+      </form>
+    </section>
+
+    <div class="admin" id="dashboard" hidden>
+      <section aria-labelledby="overview-title">
+        <div class="toolbar">
+          <h2 id="overview-title">Overview</h2>
+          <span class="spacer"></span>
+          <p class="status-line" id="updated" aria-live="polite"></p>
+          <button class="btn btn-quiet btn-small" type="button" id="refresh">Refresh</button>
+          <button class="btn btn-quiet btn-small" type="button" id="sign-out">Sign out</button>
+        </div>
+        <ul class="stats" id="stats"></ul>
+        <div class="notes" id="notes"></div>
+      </section>
+
+      <section aria-labelledby="cand-title">
+        <h2 id="cand-title">Candidates</h2>
+        <p class="section-note">Live counts, visible only on this page until voting closes. Removing a candidate also removes the votes they received, and those classmates can vote again.</p>
+        <div class="table-scroll"><table class="data" id="cand-table"></table></div>
+      </section>
+
+      <section aria-labelledby="dupe-title">
+        <h2 id="dupe-title">Possible duplicates</h2>
+        <p class="section-note">Names that may belong to the same person: same words in another order, one name inside another, or spellings one or two letters apart. Check before removing anything.</p>
+        <div id="dupes"></div>
+      </section>
+
+      <section aria-labelledby="roll-title">
+        <h2 id="roll-title">Voter roll</h2>
+        <p class="section-note">Everyone who has voted, oldest first. Removing an entry also removes that vote, and the person can vote again.</p>
+        <div class="table-scroll"><table class="data" id="roll-table"></table></div>
+      </section>
+
+      <section aria-labelledby="class-title">
+        <h2 id="class-title">Check against the class list</h2>
+        <p class="section-note">Paste the class list, one name per line, to see who hasn’t voted and which voters aren’t on the list. The list stays in this browser.</p>
+        <div class="field">
+          <label for="class-list">Class list</label>
+          <textarea id="class-list" rows="8" placeholder="First name Last name, one per line"></textarea>
+        </div>
+        <div class="columns-2">
+          <div><h3 id="missing-title">Not voted yet</h3><div id="missing"></div></div>
+          <div><h3 id="unknown-title">Voted, not on the list</h3><div id="unknown"></div></div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer class="foot">
+    <div class="wrap">Organiser page. Who voted for whom is never shown here.</div>
+  </footer>
+  <p class="toast" id="toast" role="status" hidden></p>
+
+  <script src="config.js"></script>
+  <script src="admin.js"></script>
+</body>
+</html>

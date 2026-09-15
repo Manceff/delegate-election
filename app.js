@@ -8,15 +8,15 @@
 
   // Codes raised by the database functions → what the voter should read.
   const ERRORS = {
-    polls_closed: "Polls are closed, so no more ballots or candidacies are accepted.",
+    polls_closed: "Voting is closed, so no more votes or candidacies are accepted.",
     invalid_name: "Enter your first and last name (3 to 60 characters).",
     invalid_statement: "Your statement needs between 20 and 600 characters.",
     device_already_candidate: "A candidacy has already been submitted from this device.",
-    name_taken: "A candidate with this name is already on the ballot.",
-    too_many_candidates: "The ballot is full (40 candidates). Contact the class organiser.",
-    unknown_candidate: "That candidate is no longer on the ballot. Tick another name.",
-    device_already_voted: "A ballot has already been cast from this device.",
-    name_already_voted: "This name is already on the voter roll. If you haven’t voted, tell the class organiser.",
+    name_taken: "A candidate with this name is already standing.",
+    too_many_candidates: "The candidate list is full (40). Contact the organiser.",
+    unknown_candidate: "That candidate has been removed. Choose another one.",
+    device_already_voted: "A vote has already been submitted from this device.",
+    name_already_voted: "This name has already voted. If it wasn’t you, tell the organiser.",
     missing_device: "Your browser is blocking this page’s storage. Try another browser.",
   };
 
@@ -82,8 +82,8 @@
 
   function explain(err) {
     if (ERRORS[err.code]) return ERRORS[err.code];
-    if (err.code === "network") return "Couldn’t reach the ballot box. Check your connection and try again.";
-    return `The ballot box refused this request (${err.message}).`;
+    if (err.code === "network") return "Couldn’t reach the server. Check your connection and try again.";
+    return `The server refused this request (${err.message}).`;
   }
 
   const state = {
@@ -197,16 +197,13 @@
 
   function render() {
     const d = state.data;
-    const pill = $("status-pill");
     const closed = Boolean(d && d.closed);
-    pill.classList.toggle("is-open", !closed);
-    pill.classList.toggle("is-closed", closed);
-    $("status-text").textContent = state.failed ? "Reconnecting…" : closed ? "Polls closed" : "Polls open";
+    $("status-text").textContent = state.failed ? "Reconnecting…" : closed ? "Voting closed" : "Voting open";
 
     if (!d) {
       $("vote-loading").hidden = state.failed;
       showMessage("vote-message", state.failed && {
-        title: "Couldn’t reach the ballot box.",
+        title: "Couldn’t load the election.",
         text: "Check your connection. The page tries again every 15 seconds.",
       });
       return;
@@ -223,15 +220,15 @@
     const n = d.candidates.length;
     $("clock-wrap").hidden = d.closed;
     $("closed-banner").hidden = !d.closed;
-    $("closes").textContent = `${when} · Paris time`;
-    $("closed-when").textContent = `Polls closed on ${when}, Paris time. The count is below.`;
+    $("closes").textContent = when;
+    $("closed-when").textContent = `Voting closed on ${when}, Paris time.`;
     $("rule-result").textContent = d.closed
-      ? `Polls closed on ${when}, Paris time, and the count is published on this page. A tie for first place is settled by a run-off.`
-      : `The count stays sealed until polls close on ${when}, Paris time. Results then appear on this page. A tie for first place is settled by a run-off.`;
+      ? `Voting closed on ${when}, Paris time. The results are shown on this page. A tie for first place is settled by a run-off.`
+      : `Results stay hidden until voting closes on ${when}, Paris time, then appear on this page. A tie for first place is settled by a run-off.`;
     $("count-candidates").textContent = n;
     $("label-candidates").textContent = plural(n, "candidate", "candidates");
     $("count-turnout").textContent = d.turnout;
-    $("label-turnout").textContent = plural(d.turnout, "ballot cast", "ballots cast");
+    $("label-turnout").textContent = plural(d.turnout, "vote cast", "votes cast");
     $("tab-vote").textContent = d.closed ? "Results" : "Vote";
     $("run-sub").textContent = d.closed ? "Closed" : `Open until ${when}`;
   }
@@ -253,8 +250,8 @@
       form.hidden = true;
       showMessage("vote-message", {
         ok: true,
-        title: "Your ballot is in the box.",
-        text: `Thanks for voting. The count stays sealed until polls close on ${closeLabel(d.polls_close_at)}, Paris time. Come back then for the result.`,
+        title: "Your vote has been recorded.",
+        text: `Thank you. Results will be published here when voting closes on ${closeLabel(d.polls_close_at)}, Paris time.`,
       });
       return;
     }
@@ -262,9 +259,9 @@
     if (!d.candidates.length) {
       form.hidden = true;
       showMessage("vote-message", {
-        title: "Nobody is on the ballot yet.",
-        text: "Candidacies stay open until polls close. Want the job? Be the first to run.",
-        action: { label: "Run for delegate", run: () => selectTab("run", true) },
+        title: "No candidates yet.",
+        text: "Candidacies are open until voting closes. Interested? Submit yours.",
+        action: { label: "Stand as a candidate", run: () => selectTab("run", true) },
       });
       return;
     }
@@ -272,7 +269,7 @@
     showMessage("vote-message", null);
     form.hidden = false;
     const n = d.candidates.length;
-    $("ballot-sub").textContent = `${n} ${plural(n, "candidate", "candidates")} · order shuffled for each voter`;
+    $("ballot-sub").textContent = `${n} ${plural(n, "candidate", "candidates")}, listed in random order`;
     renderBallot(d.candidates, me.candidate_id);
   }
 
@@ -322,45 +319,44 @@
     const leaders = top > 0 ? ranked.filter((c) => c.votes === top) : [];
     const tie = leaders.length > 1;
 
-    const head = el("div", "sheet-head");
-    head.append(el("h2", null, "The count"), el("p", null, `${total} ${plural(total, "ballot", "ballots")} counted`));
+    const head = el("div", "panel-head");
+    head.append(el("h2", null, "Results"), el("p", null, `${total} ${plural(total, "vote", "votes")} counted`));
 
-    const intro = el("div", "msg");
+    let lead;
+    if (!ranked.length) lead = "Nobody stood in this election.";
+    else if (!leaders.length) lead = "No votes were cast.";
+    else if (tie) lead = `Tie for first place between ${leaders.map((c) => c.full_name).join(" and ")}, with ${top} ${plural(top, "vote", "votes")} each. A run-off will decide.`;
+    else lead = `${leaders[0].full_name} is elected class representative, with ${top} of ${total} ${plural(total, "vote", "votes")}.`;
+
     if (!ranked.length) {
-      intro.append(el("h3", null, "No candidates stood in this election."));
-    } else if (!leaders.length) {
-      intro.append(el("h3", null, "No ballots were cast."));
-    } else if (tie) {
-      intro.append(
-        el("h3", null, `Tie for first place: ${leaders.map((c) => c.full_name).join(" and ")}.`),
-        el("p", null, `Each has ${top} ${plural(top, "vote", "votes")}. A run-off between them decides the delegate.`),
-      );
-    } else {
-      intro.append(
-        el("h3", null, `${leaders[0].full_name} is elected class delegate.`),
-        el("p", null, `${top} of ${total} ${plural(total, "vote", "votes")}.`),
-      );
+      $("results").replaceChildren(head, el("p", "result-lead", lead));
+      return;
     }
 
-    const list = el("ul", "ballot");
-    for (const c of ranked) {
-      const lead = leaders.includes(c);
-      const li = el("li", lead ? "result is-winner" : "result");
-      const row = el("div", "result-top");
-      const name = el("span", "cand-name", c.full_name);
-      if (lead) name.append(el("span", "stamp", tie ? "Tied" : "Elected"));
-      const votes = el("span", "result-votes", String(c.votes));
-      votes.append(el("small", null, ` ${total ? Math.round((c.votes / total) * 100) : 0}%`));
-      row.append(name, votes);
-      const bar = el("div", "bar");
-      bar.setAttribute("aria-hidden", "true");
-      const fill = el("i");
-      fill.style.width = `${total ? (c.votes / total) * 100 : 0}%`;
-      bar.append(fill);
-      li.append(row, bar);
-      list.append(li);
+    const headRow = el("tr");
+    for (const [label, cls] of [["Candidate", null], ["Votes", "num"], ["Share", "num"]]) {
+      const th = el("th", cls, label);
+      th.scope = "col";
+      headRow.append(th);
     }
-    $("results").replaceChildren(head, intro, list);
+    const thead = el("thead");
+    thead.append(headRow);
+
+    const tbody = el("tbody");
+    for (const c of ranked) {
+      const row = el("tr");
+      const name = el("th", null, c.full_name);
+      name.scope = "row";
+      if (leaders.includes(c)) name.append(el("span", "tag", tie ? "Tied" : "Elected"));
+      row.append(name, el("td", "num", String(c.votes)), el("td", "num", `${total ? Math.round((c.votes / total) * 100) : 0}%`));
+      tbody.append(row);
+    }
+
+    const table = el("table", "results");
+    table.append(thead, tbody);
+    const scroll = el("div", "table-scroll");
+    scroll.append(table);
+    $("results").replaceChildren(head, el("p", "result-lead", lead), scroll);
   }
 
   function renderRun(d) {
@@ -372,15 +368,15 @@
       form.hidden = true;
       showMessage("run-message", {
         ok: true,
-        title: "You’re on the ballot.",
-        text: `${mine ? mine.full_name + ": c" : "C"}lassmates can now vote for you. Share the link so everyone reads your statement.`,
-        action: d.closed ? null : { label: "See the ballot", run: () => selectTab("vote", true) },
+        title: "Your candidacy is registered.",
+        text: `${mine ? mine.full_name + " now appears" : "You now appear"} in the candidate list. Share the link so classmates can read your statement.`,
+        action: d.closed ? null : { label: "See the candidates", run: () => selectTab("vote", true) },
       });
       return;
     }
     if (d.closed) {
       form.hidden = true;
-      showMessage("run-message", { title: "Candidacies are closed.", text: "Polls have closed, so no new names can be added." });
+      showMessage("run-message", { title: "Candidacies are closed.", text: "Voting has closed, so no new candidacies can be added." });
       return;
     }
     showMessage("run-message", null);
@@ -398,7 +394,7 @@
 
   function resetConfirm() {
     state.confirmFor = null;
-    $("vote-submit").textContent = "Cast my ballot";
+    $("vote-submit").textContent = "Submit my vote";
     $("vote-confirm-hint").hidden = true;
   }
 
@@ -409,7 +405,7 @@
     $("vote-error").hidden = true;
 
     const candidate = d.candidates.find((c) => c.id === state.selected);
-    if (!candidate) return showError("vote-error", "Tick one name on the ballot first.");
+    if (!candidate) return showError("vote-error", "Choose a candidate first.");
     const name = cleanName($("voter-name").value);
     if (!validName(name)) return showError("vote-error", ERRORS.invalid_name, "voter-name");
 
@@ -422,7 +418,7 @@
 
     const button = $("vote-submit");
     button.disabled = true;
-    button.textContent = "Casting your ballot…";
+    button.textContent = "Submitting your vote…";
     try {
       await rpc("election_vote", { p_full_name: name, p_candidate: candidate.id, p_device: deviceId });
       state.voted = true;
@@ -448,7 +444,7 @@
 
     const button = $("run-submit");
     button.disabled = true;
-    button.textContent = "Adding your name…";
+    button.textContent = "Submitting…";
     try {
       await rpc("election_register", { p_full_name: name, p_statement: statement, p_device: deviceId });
       state.registered = true;
@@ -461,7 +457,7 @@
       if (err.code !== "network") load();
     } finally {
       button.disabled = false;
-      button.textContent = "Put my name on the ballot";
+      button.textContent = "Submit my candidacy";
     }
   });
 
