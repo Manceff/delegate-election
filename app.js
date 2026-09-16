@@ -4,6 +4,8 @@
   const { supabaseUrl, supabaseKey } = window.ELECTION_CONFIG;
   const TZ = "Europe/Paris";
   const REFRESH_MS = 15000;
+  const PHOTO_BUCKET = "candidate-photos";
+  const photoUrl = (path) => `${supabaseUrl}/storage/v1/object/public/${PHOTO_BUCKET}/${path}`;
   const TICK_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
   // Codes raised by the database functions → what the voter should read.
@@ -18,6 +20,11 @@
     device_already_voted: "A vote has already been submitted from this device.",
     name_already_voted: "This name has already voted. If it wasn’t you, tell the organiser.",
     missing_device: "Your browser is blocking this page’s storage. Try another browser.",
+    not_found: "This device has no candidacy on the list.",
+    invalid_photo: "That photo couldn’t be attached. Choose it again.",
+    not_image: "Choose an image: JPEG, PNG or WebP.",
+    photo_unreadable: "That image couldn’t be opened. Try another one.",
+    upload_failed: "The photo couldn’t be uploaded. Check your connection and try again.",
   };
 
   const $ = (id) => document.getElementById(id);
@@ -94,6 +101,10 @@
     confirmFor: null,
     voted: false,
     registered: false,
+    mine: null,
+    photoBlob: null,
+    photoPreview: null,
+    photoBusy: false,
   };
 
   // Loads run one after another so a vote is never followed by a stale snapshot.
@@ -134,6 +145,93 @@
     return h >>> 0;
   }
   const shuffled = (cands) => [...cands].sort((a, b) => hash(deviceId + a.id) - hash(deviceId + b.id));
+
+  const initials = (name) => (name || "").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join("");
+
+  function avatar(candidate, size) {
+    const box = el("span", size ? `avatar ${size}` : "avatar");
+    if (candidate.photo_path) {
+      const img = el("img");
+      img.src = photoUrl(candidate.photo_path);
+      img.alt = "";
+      img.loading = "lazy";
+      box.append(img);
+    } else {
+      box.append(el("span", "initials", initials(candidate.full_name)));
+    }
+    return box;
+  }
+
+  function photoError() {
+    return Object.assign(new Error("photo_unreadable"), { code: "photo_unreadable" });
+  }
+
+  function withTimeout(promise, ms) {
+    return Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(photoError()), ms))]);
+  }
+
+  // createImageBitmap also straightens photos taken sideways; the <img> path is the fallback.
+  async function loadImage(file) {
+    if (window.createImageBitmap) {
+      try {
+        return await createImageBitmap(file, { imageOrientation: "from-image" });
+      } catch {
+        try {
+          return await createImageBitmap(file);
+        } catch { /* fall back to the <img> path */ }
+      }
+    }
+    const url = URL.createObjectURL(file);
+    try {
+      return await new Promise((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => resolve(image);
+        image.onerror = () => reject(photoError());
+        image.src = url;
+      });
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+
+  // Square crop, downsized and re-encoded on the device: uploads stay small.
+  async function processPhoto(file) {
+    if (!file.type || !file.type.startsWith("image/")) throw Object.assign(new Error("not_image"), { code: "not_image" });
+    const source = await withTimeout(loadImage(file), 20000);
+    const width = source.naturalWidth || source.width;
+    const height = source.naturalHeight || source.height;
+    if (!width || !height) throw photoError();
+
+    const side = Math.min(width, height);
+    const canvas = document.createElement("canvas");
+    canvas.width = 512;
+    canvas.height = 512;
+    const ctx = canvas.getContext("2d");
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(source, (width - side) / 2, (height - side) / 2, side, side, 0, 0, 512, 512);
+    if (source.close) source.close();
+
+    let blob = await withTimeout(new Promise((done) => canvas.toBlob(done, "image/jpeg", 0.82)), 20000);
+    if (blob && blob.size > 380000) blob = await withTimeout(new Promise((done) => canvas.toBlob(done, "image/jpeg", 0.6)), 20000);
+    if (!blob) throw photoError();
+    return blob;
+  }
+
+  async function uploadPhoto(blob) {
+    const name = `${deviceId}/${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}.jpg`;
+    let res;
+    try {
+      res = await fetch(`${supabaseUrl}/storage/v1/object/${PHOTO_BUCKET}/${name}`, {
+        method: "POST",
+        headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, "Content-Type": "image/jpeg" },
+        body: blob,
+      });
+    } catch {
+      throw Object.assign(new Error("upload_failed"), { code: "upload_failed" });
+    }
+    if (!res.ok) throw Object.assign(new Error("upload_failed"), { code: "upload_failed" });
+    return name;
+  }
 
   /* ---------- Countdown ---------- */
 
@@ -219,6 +317,7 @@
     const when = closeLabel(d.polls_close_at);
     const n = d.candidates.length;
     $("clock-wrap").hidden = d.closed;
+    $("closes-line").hidden = d.closed;
     $("closed-banner").hidden = !d.closed;
     $("closes").textContent = when;
     $("closed-when").textContent = `Voting closed on ${when}, Paris time.`;
@@ -279,7 +378,7 @@
       state.selected = null;
       resetConfirm();
     }
-    const sig = JSON.stringify([myCandidateId, cands.map((c) => [c.id, c.full_name, c.statement])]);
+    const sig = JSON.stringify([myCandidateId, cands.map((c) => [c.id, c.full_name, c.statement, c.photo_path])]);
     if (sig === ballotSig) return;
     ballotSig = sig;
 
@@ -305,7 +404,7 @@
       const name = el("span", "cand-name", c.full_name);
       if (c.id === myCandidateId) name.append(el("span", "chip", "You"));
       text.append(name, el("span", "cand-statement", c.statement));
-      label.append(box, text);
+      label.append(box, avatar(c), text);
 
       li.append(input, label);
       return li;
@@ -345,9 +444,12 @@
     const tbody = el("tbody");
     for (const c of ranked) {
       const row = el("tr");
-      const name = el("th", null, c.full_name);
+      const name = el("th");
       name.scope = "row";
-      if (leaders.includes(c)) name.append(el("span", "tag", tie ? "Tied" : "Elected"));
+      const label = el("span", "with-avatar");
+      label.append(avatar(c, "avatar-xs"), el("span", null, c.full_name));
+      if (leaders.includes(c)) label.append(el("span", "tag", tie ? "Tied" : "Elected"));
+      name.append(label);
       row.append(name, el("td", "num", String(c.votes)), el("td", "num", `${total ? Math.round((c.votes / total) * 100) : 0}%`));
       tbody.append(row);
     }
@@ -361,8 +463,11 @@
 
   function renderRun(d) {
     const me = d.me || {};
-    const mine = d.candidates.find((c) => c.id === me.candidate_id);
+    const mine = d.candidates.find((c) => c.id === me.candidate_id) || null;
     const form = $("run-form");
+    state.mine = mine;
+    $("photo-field").hidden = d.closed;
+    renderPhotoField();
 
     if (mine || state.registered) {
       form.hidden = true;
@@ -382,6 +487,86 @@
     showMessage("run-message", null);
     form.hidden = false;
   }
+
+  function renderPhotoField() {
+    const mine = state.mine;
+    const url = state.photoPreview || (mine && mine.photo_path ? photoUrl(mine.photo_path) : null);
+    const preview = $("photo-preview");
+    if (url) {
+      const img = el("img");
+      img.src = url;
+      img.alt = "";
+      preview.replaceChildren(img);
+    } else {
+      preview.replaceChildren(el("span", "initials", initials($("run-name").value || (mine && mine.full_name) || "")));
+    }
+    if (!state.photoBusy) {
+      $("photo-pick").textContent = url ? "Change photo" : "Add a photo";
+      $("photo-clear").hidden = !url;
+    }
+    $("photo-hint").textContent = mine
+      ? "Shown next to your name in the candidate list. Saved as soon as you choose it."
+      : "Optional. Shown next to your name, cropped to a square and resized on your device.";
+  }
+
+  function setPhotoBusy(busy, label) {
+    state.photoBusy = busy;
+    $("photo-pick").disabled = busy;
+    $("photo-clear").disabled = busy;
+    if (busy) $("photo-pick").textContent = label;
+    else renderPhotoField();
+  }
+
+  function clearStagedPhoto() {
+    if (state.photoPreview) URL.revokeObjectURL(state.photoPreview);
+    state.photoPreview = null;
+    state.photoBlob = null;
+  }
+
+  $("photo-pick").addEventListener("click", () => $("run-photo").click());
+
+  $("run-photo").addEventListener("change", async (event) => {
+    const file = event.target.files && event.target.files[0];
+    event.target.value = "";
+    if (!file) return;
+    $("photo-error").hidden = true;
+    setPhotoBusy(true, "Preparing…");
+    try {
+      const blob = await processPhoto(file);
+      clearStagedPhoto();
+      state.photoBlob = blob;
+      state.photoPreview = URL.createObjectURL(blob);
+      renderPhotoField();
+      if (state.mine) {
+        setPhotoBusy(true, "Uploading…");
+        const path = await uploadPhoto(blob);
+        await rpc("election_set_photo", { p_device: deviceId, p_photo: path });
+        state.photoBlob = null;
+        await load();
+      }
+    } catch (err) {
+      showError("photo-error", explain(err));
+    } finally {
+      setPhotoBusy(false);
+    }
+  });
+
+  $("photo-clear").addEventListener("click", async () => {
+    $("photo-error").hidden = true;
+    const had = state.mine && state.mine.photo_path;
+    clearStagedPhoto();
+    renderPhotoField();
+    if (!had) return;
+    setPhotoBusy(true, "Removing…");
+    try {
+      await rpc("election_set_photo", { p_device: deviceId, p_photo: null });
+      await load();
+    } catch (err) {
+      showError("photo-error", explain(err));
+    } finally {
+      setPhotoBusy(false);
+    }
+  });
 
   /* ---------- Actions ---------- */
 
@@ -446,8 +631,10 @@
     button.disabled = true;
     button.textContent = "Submitting…";
     try {
-      await rpc("election_register", { p_full_name: name, p_statement: statement, p_device: deviceId });
+      const path = state.photoBlob ? await uploadPhoto(state.photoBlob) : null;
+      await rpc("election_register", { p_full_name: name, p_statement: statement, p_device: deviceId, p_photo: path });
       state.registered = true;
+      clearStagedPhoto();
       $("run-form").reset();
       updateCounter();
       await load();
@@ -468,7 +655,10 @@
     updateCounter();
     $("run-error").hidden = true;
   });
-  $("run-name").addEventListener("input", () => { $("run-error").hidden = true; });
+  $("run-name").addEventListener("input", () => {
+    $("run-error").hidden = true;
+    renderPhotoField();
+  });
   $("voter-name").addEventListener("input", () => {
     $("vote-error").hidden = true;
     if (state.confirmFor) resetConfirm();

@@ -290,3 +290,29 @@ table.results, table.data { width: 100%; border-collapse: collapse; font-variant
   box-shadow: 0 6px 18px rgba(0, 20, 45, .22);
 }
 .toast.is-error { background: var(--error-tint); color: var(--error); border: 1px solid currentColor; }
+
+/* Candidate photos */
+.avatar {
+  display: grid; place-items: center; flex: none;
+  width: 56px; height: 56px; overflow: hidden;
+  border-radius: 50%; background: var(--tint);
+}
+.avatar img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.avatar .initials { font: 600 18px/1 var(--sans); color: var(--muted); }
+.avatar-lg { width: 96px; height: 96px; }
+.avatar-lg .initials { font-size: 30px; }
+.avatar-sm { width: 40px; height: 40px; }
+.avatar-sm .initials { font-size: 14px; }
+.avatar-xs { width: 30px; height: 30px; }
+.avatar-xs .initials { font-size: 12px; }
+.with-avatar { display: flex; align-items: center; gap: 12px; }
+.photo-field { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+.photo-actions { display: grid; gap: 10px; justify-items: start; }
+.photo-buttons { display: flex; flex-wrap: wrap; gap: 10px; }
+.photo-actions .hint { max-width: 44ch; }
+.option label { grid-template-columns: 22px 56px minmax(0, 1fr); }
+@media (max-width: 560px) {
+  .option label { grid-template-columns: 22px 48px minmax(0, 1fr); gap: 12px; }
+  .option .avatar { width: 48px; height: 48px; }
+  .avatar-lg { width: 80px; height: 80px; }
+}

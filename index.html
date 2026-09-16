@@ -24,7 +24,7 @@
       <div class="intro">
         <p class="programme">Master Finance, Technology &amp; Data</p>
         <h1>Class representative election</h1>
-        <p class="lede">Academic year 2026–2027. Voting closes <strong id="closes">Monday 21 September at midnight</strong>, Paris time.</p>
+        <p class="lede">Academic year 2026–2027. <span id="closes-line">Voting closes <strong id="closes">Monday 21 September at midnight</strong>, Paris time.</span></p>
       </div>
 
       <div id="clock-wrap">
@@ -81,6 +81,20 @@
           <p id="run-sub">Open until voting closes</p>
         </div>
         <div id="run-message" hidden></div>
+
+        <div class="photo-field" id="photo-field">
+          <span class="avatar avatar-lg" id="photo-preview"></span>
+          <div class="photo-actions">
+            <input id="run-photo" class="sr-only" type="file" accept="image/*">
+            <div class="photo-buttons">
+              <button class="btn btn-quiet btn-small" type="button" id="photo-pick">Add a photo</button>
+              <button class="btn btn-quiet btn-small" type="button" id="photo-clear" hidden>Remove photo</button>
+            </div>
+            <p class="alert is-error" id="photo-error" role="alert" hidden></p>
+            <p class="hint" id="photo-hint">Optional. Shown next to your name, cropped to a square and resized on your phone.</p>
+          </div>
+        </div>
+
         <form id="run-form" class="form-block" novalidate>
           <div class="field">
             <label for="run-name">Your full name</label>

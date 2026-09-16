@@ -13,6 +13,8 @@
     network: "Couldn’t reach the server. Check your connection and try again.",
   };
 
+  const photoUrl = (path) => `${supabaseUrl}/storage/v1/object/public/candidate-photos/${path}`;
+
   const $ = (id) => document.getElementById(id);
   const plural = (n, one, many) => (n === 1 ? one : many);
 
@@ -193,6 +195,22 @@
     renderClassCheck();
   }
 
+  const initials = (name) => (name || "").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join("");
+
+  function avatar(candidate) {
+    const box = el("span", "avatar avatar-sm");
+    if (candidate.photo_path) {
+      const img = el("img");
+      img.src = photoUrl(candidate.photo_path);
+      img.alt = "";
+      img.loading = "lazy";
+      box.append(img);
+    } else {
+      box.append(el("span", "initials", initials(candidate.full_name)));
+    }
+    return box;
+  }
+
   function removeButton(name, onClick) {
     const button = el("button", "btn btn-danger btn-small", "Remove");
     button.type = "button";
@@ -227,9 +245,17 @@
     const ranked = [...data.candidates].sort((a, b) => b.votes - a.votes || a.full_name.localeCompare(b.full_name));
     const rows = ranked.map((c) => {
       const row = el("tr");
-      const name = el("td", "name", c.full_name);
-      name.append(el("span", "sub", c.statement));
+      const name = el("td", "name");
+      const label = el("span", "with-avatar");
+      label.append(avatar(c), el("span", null, c.full_name));
+      name.append(label, el("span", "sub", c.statement));
       const actions = el("td", "actions");
+      if (c.photo_path) {
+        const photoButton = el("button", "btn btn-quiet btn-small", "Remove photo");
+        photoButton.type = "button";
+        photoButton.addEventListener("click", () => removePhoto(c));
+        actions.append(photoButton, document.createTextNode(" "));
+      }
       actions.append(removeButton(c.full_name, () => removeCandidate(c)));
       row.append(name, el("td", null, when(c.registered_at)), el("td", "num", String(c.votes)), actions);
       return row;
@@ -332,6 +358,11 @@
     if (!window.confirm(`Remove the candidacy of ${c.full_name}?${votes}`)) return;
     act("admin_delete_candidate", { p_candidate: c.id }, (r) =>
       `Removed ${c.full_name}${r.votes_removed ? ` and ${r.votes_removed} ${plural(r.votes_removed, "vote", "votes")}` : ""}.`);
+  }
+
+  function removePhoto(c) {
+    if (!window.confirm(`Remove the photo of ${c.full_name}? Their candidacy stays on the list.`)) return;
+    act("admin_clear_photo", { p_candidate: c.id }, () => `Removed the photo of ${c.full_name}.`);
   }
 
   function removeVoter(v) {

@@ -2,3 +2,4 @@
 supabase/.temp/
 .DS_Store
 .claude/
+preview-*.html
